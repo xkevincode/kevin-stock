@@ -559,7 +559,10 @@ function PoolPanel({
         ) : null}
         {rows.length > 0 ? (
           <>
-            <div className="hidden md:block">
+            <p className="mb-2 text-xs text-muted-foreground">
+              显示 {rows.length} / {pool?.stocks.length ?? rows.length} 只
+            </p>
+            <div className="hidden max-h-[70vh] overflow-auto md:block">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -593,7 +596,7 @@ function PoolPanel({
                 </TableBody>
               </Table>
             </div>
-            <div className="grid gap-2 md:hidden">
+            <div className="grid max-h-[70vh] gap-2 overflow-auto md:hidden">
               {rows.map((row) => (
                 <div key={row.code} className="rounded-xl border p-3">
                   <div className="flex items-start justify-between">
@@ -669,7 +672,7 @@ function HitsPanel({
         ) : null}
         {result && result.hits.length > 0 && !loading ? (
           <>
-            <div className="hidden md:block">
+            <div className="hidden max-h-[70vh] overflow-auto md:block">
               <Table>
                 <TableHeader>
                   <TableRow>

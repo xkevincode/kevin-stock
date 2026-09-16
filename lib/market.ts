@@ -130,15 +130,18 @@ function parseQuote(row: Record<string, unknown>): QuoteRow | null {
 }
 
 export function inferMarket(code: string): number {
-  if (code.startsWith("6") || code.startsWith("9")) return 1;
-  if (code.startsWith("8") || code.startsWith("4")) return 8;
+  if (code.startsWith("6")) return 1;
+  if (code.startsWith("8") || code.startsWith("4") || code.startsWith("92")) return 8;
+  if (code.startsWith("9")) return 1;
   return 0;
 }
 
 export function toTencentSymbol(code: string, market?: number): string {
+  if (code.startsWith("6")) return `sh${code}`;
+  if (code.startsWith("8") || code.startsWith("4") || code.startsWith("92")) return `bj${code}`;
   const m = market ?? inferMarket(code);
-  if (m === 1 || code.startsWith("6")) return `sh${code}`;
-  if (m === 8 || code.startsWith("8") || code.startsWith("4")) return `bj${code}`;
+  if (m === 1) return `sh${code}`;
+  if (m === 8) return `bj${code}`;
   return `sz${code}`;
 }
 
@@ -286,7 +289,13 @@ async function fetchTencentKlines(symbol: string, count: number): Promise<KLine[
     retries: 2,
   });
   const pack = json.data?.[symbol];
-  const bars = parseTencentBars(pack?.qfqday ?? pack?.day);
+  const rows =
+    pack?.qfqday && pack.qfqday.length > 0
+      ? pack.qfqday
+      : pack?.day && pack.day.length > 0
+        ? pack.day
+        : pack?.qfqweek;
+  const bars = parseTencentBars(rows);
   if (bars.length === 0) {
     throw new Error("腾讯行情无 K 线");
   }
