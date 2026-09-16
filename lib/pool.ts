@@ -136,14 +136,3 @@ export async function buildCandidatePool(): Promise<PoolResult> {
   cacheSet(key, result, quoteTtlMs());
   return result;
 }
-
-export function poolReasonLabel(reason: PoolReason): string {
-  switch (reason) {
-    case "leader":
-      return "龙头";
-    case "range":
-      return "涨幅区间";
-    case "both":
-      return "两者";
-  }
-}

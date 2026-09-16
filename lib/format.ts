@@ -1,3 +1,5 @@
+import type { PoolReason } from "@/lib/types";
+
 export function formatPct(value: number, digits = 2): string {
   const sign = value > 0 ? "+" : "";
   return `${sign}${value.toFixed(digits)}%`;
@@ -12,6 +14,17 @@ export function pctClass(value: number): string {
   if (value > 0) return "text-[#c62828]";
   if (value < 0) return "text-[#2e7d32]";
   return "text-muted-foreground";
+}
+
+export function poolReasonLabel(reason: PoolReason): string {
+  switch (reason) {
+    case "leader":
+      return "龙头";
+    case "range":
+      return "涨幅区间";
+    case "both":
+      return "两者";
+  }
 }
 
 export function formatDateInput(date = new Date()): string {

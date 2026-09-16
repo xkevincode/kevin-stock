@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
 import {
   Loader2Icon,
   PlusIcon,
@@ -33,8 +33,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { daysAgo, formatDateInput, formatPct, formatPrice, pctClass } from "@/lib/format";
-import { poolReasonLabel } from "@/lib/pool";
+import { daysAgo, formatDateInput, formatPct, formatPrice, pctClass, poolReasonLabel } from "@/lib/format";
 import { conditionLabel, defaultBuyStrategy, defaultSellStrategy } from "@/lib/strategies";
 import { getStrategiesServerSnapshot, getStrategiesSnapshot, saveStrategies, subscribeStrategies } from "@/lib/storage";
 import type {
@@ -65,7 +64,13 @@ async function getJson<T>(url: string): Promise<T> {
   return json.data;
 }
 
-export function ScreenerApp() {
+export function ScreenerApp({
+  initialPool = null,
+  initialError = null,
+}: {
+  initialPool?: PoolResult | null;
+  initialError?: string | null;
+}) {
   const strategies = useSyncExternalStore(
     subscribeStrategies,
     getStrategiesSnapshot,
@@ -74,9 +79,9 @@ export function ScreenerApp() {
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<Strategy | null>(null);
 
-  const [pool, setPool] = useState<PoolResult | null>(null);
-  const [poolLoading, setPoolLoading] = useState(true);
-  const [poolError, setPoolError] = useState<string | null>(null);
+  const [pool, setPool] = useState<PoolResult | null>(initialPool);
+  const [poolLoading, setPoolLoading] = useState(false);
+  const [poolError, setPoolError] = useState<string | null>(initialError);
   const [poolQuery, setPoolQuery] = useState("");
 
   const [screen, setScreen] = useState<ScreenResult | null>(null);
@@ -101,26 +106,6 @@ export function ScreenerApp() {
     } finally {
       setPoolLoading(false);
     }
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    getJson<PoolResult>("/api/pool")
-      .then((data) => {
-        if (cancelled) return;
-        setPool(data);
-        setPoolError(null);
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        setPoolError(err instanceof Error ? err.message : "候选池刷新失败");
-      })
-      .finally(() => {
-        if (!cancelled) setPoolLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
   const enabledBuy = strategies.filter((s) => s.enabled && s.side === "buy");
