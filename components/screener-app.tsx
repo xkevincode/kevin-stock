@@ -340,7 +340,7 @@ function StrategyPanel({
           <div>
             <CardTitle>策略</CardTitle>
             <CardDescription>
-              买入每条条件都可直接手写修改。保存在本机浏览器，不会上传服务器。
+              买入、卖出各有默认可改条件。手写会切换下面的槽位（均线 / MACD / 涨跌幅）。
             </CardDescription>
           </div>
           <Button size="sm" variant="outline" onClick={onCreate}>
