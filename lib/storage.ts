@@ -1,7 +1,7 @@
 import { defaultStrategies } from "@/lib/strategies";
 import type { Strategy } from "@/lib/types";
 
-export const STRATEGIES_KEY = "kevin-stock.strategies.v2";
+export const STRATEGIES_KEY = "kevin-stock.strategies.v3";
 const CHANGE_EVENT = "kevin-stock-strategies";
 
 const serverSnapshot = defaultStrategies();

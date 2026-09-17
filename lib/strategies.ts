@@ -32,6 +32,7 @@ export function defaultCondition(
     macdSignal: 9,
     lookback: 26,
     nearHighRatio: 0.9,
+    pctThreshold: 5,
     handwritten: "",
     ...partial,
   };
@@ -50,6 +51,17 @@ export function structuredLabel(condition: StrategyCondition): string {
   }
   if (condition.indicator === "macd_hist" && condition.relation === "near_high") {
     return `${tf} MACD柱 处于近${condition.lookback}根高点附近（≥${Math.round(condition.nearHighRatio * 100)}%）`;
+  }
+  if (condition.indicator === "unparsed") {
+    return "未能识别手写内容";
+  }
+  if (condition.indicator === "price_pct") {
+    const pct = Number.isFinite(condition.pctThreshold)
+      ? condition.pctThreshold
+      : 0;
+    if (condition.relation === "stop_loss") return `亏损 ${pct}% 卖出`;
+    if (condition.relation === "take_profit") return `盈利 ${pct}% 卖出`;
+    return `收益或损失达到 ${pct}% 卖出`;
   }
   return `${tf} ${condition.indicator} ${condition.relation}`;
 }
@@ -100,7 +112,7 @@ export function defaultSellStrategy(): Strategy {
     name: "默认可卖出",
     enabled: true,
     side: "sell",
-    match: "all",
+    match: "any",
     conditions: [
       defaultCondition({
         id: "default-sell-macd",
@@ -113,6 +125,14 @@ export function defaultSellStrategy(): Strategy {
         lookback: 26,
         nearHighRatio: 0.9,
         handwritten: "周K MACD柱 处于近26根高点附近（≥90%）",
+      }),
+      defaultCondition({
+        id: "default-sell-pct",
+        timeframe: "daily",
+        indicator: "price_pct",
+        relation: "pct_band",
+        pctThreshold: 5,
+        handwritten: "收益损失5%卖出",
       }),
     ],
   };
@@ -134,7 +154,52 @@ export function parseHandwritten(
   const handwritten = text.trim();
   const next: StrategyCondition = { ...prev, handwritten };
   if (!handwritten) {
-    return applyHandwritten({ ...next, handwritten: "" });
+    return {
+      ...applyHandwritten({ ...next, handwritten: "" }),
+      indicator: "unparsed",
+    };
+  }
+
+  const pctMatch = handwritten.match(/(\d+(?:\.\d+)?)\s*%/);
+  const pct = pctMatch ? Number(pctMatch[1]) : NaN;
+  if (
+    Number.isFinite(pct) &&
+    /收益\s*损失|盈亏|涨跌幅|涨跌达/.test(handwritten)
+  ) {
+    return {
+      ...next,
+      timeframe: "daily",
+      indicator: "price_pct",
+      relation: "pct_band",
+      pctThreshold: pct,
+    };
+  }
+  if (Number.isFinite(pct) && /(止损|亏损|跌幅)/.test(handwritten)) {
+    return {
+      ...next,
+      timeframe: "daily",
+      indicator: "price_pct",
+      relation: "stop_loss",
+      pctThreshold: pct,
+    };
+  }
+  if (Number.isFinite(pct) && /(止盈|盈利|获利|涨幅)/.test(handwritten)) {
+    return {
+      ...next,
+      timeframe: "daily",
+      indicator: "price_pct",
+      relation: "take_profit",
+      pctThreshold: pct,
+    };
+  }
+  if (Number.isFinite(pct) && /损失/.test(handwritten)) {
+    return {
+      ...next,
+      timeframe: "daily",
+      indicator: "price_pct",
+      relation: "stop_loss",
+      pctThreshold: pct,
+    };
   }
 
   if (/周[Kk线]/.test(handwritten) || /周线/.test(handwritten)) {
@@ -147,7 +212,7 @@ export function parseHandwritten(
     handwritten.match(/MA\s*(\d+)\s*(?:向上)?(?:上穿|突破)\s*MA\s*(\d+)/i) ||
     handwritten.match(/(\d+)\s*日均线?\s*(?:向上)?(?:突破|上穿)\s*(\d+)\s*日?(?:均线)?/) ||
     handwritten.match(/(\d+)\s*[/／]\s*(\d+)\s*均线/) ||
-    handwritten.match(/(\d+)\s*日?\s*上穿\s*(\d+)/);
+    handwritten.match(/MA\s*(\d+)\s*(?:向上)?(?:上穿|突破)\s*(\d+)/i);
   if (ma) {
     next.indicator = "ma";
     next.relation = "cross_above";
@@ -173,8 +238,8 @@ export function parseHandwritten(
     next.indicator = "macd_hist";
     next.relation = "near_high";
     if (lookback) next.lookback = Number(lookback[1]);
-    const pct = handwritten.match(/(\d+(?:\.\d+)?)\s*%/);
-    if (pct) next.nearHighRatio = Number(pct[1]) / 100;
+    const highPct = handwritten.match(/(\d+(?:\.\d+)?)\s*%/);
+    if (highPct) next.nearHighRatio = Number(highPct[1]) / 100;
     return next;
   }
   if (/拐头|最低点|MACD/i.test(handwritten)) {
@@ -183,7 +248,12 @@ export function parseHandwritten(
     if (lookback) next.lookback = Number(lookback[1]);
     return next;
   }
-  return next;
+
+  return {
+    ...next,
+    indicator: "unparsed",
+    relation: prev.relation,
+  };
 }
 
 function barsFor(condition: StrategyCondition, daily: KLine[]): KLine[] {
@@ -193,11 +263,48 @@ function barsFor(condition: StrategyCondition, daily: KLine[]): KLine[] {
 export function evaluateCondition(
   condition: StrategyCondition,
   daily: KLine[],
+  ctx?: { entryPrice?: number },
 ): ConditionEval {
   const label = conditionLabel(condition);
   const bars = barsFor(condition, daily);
   const closes = bars.map((b) => b.close);
   const lastDate = bars.at(-1)?.date ?? "—";
+
+  if (condition.indicator === "unparsed") {
+    return {
+      conditionId: condition.id,
+      label,
+      passed: false,
+      detail: "手写内容未能识别，槽位未套用均线或 MACD",
+    };
+  }
+
+  if (condition.indicator === "price_pct") {
+    const th = condition.pctThreshold;
+    if (ctx?.entryPrice == null || ctx.entryPrice === 0) {
+      return {
+        conditionId: condition.id,
+        label,
+        passed: false,
+        detail: "按买入价计算涨跌幅，需持仓后才判断",
+      };
+    }
+    const last = bars.at(-1);
+    if (!last) {
+      return { conditionId: condition.id, label, passed: false, detail: "无 K 线" };
+    }
+    const move = ((last.close - ctx.entryPrice) / ctx.entryPrice) * 100;
+    let passed = false;
+    if (condition.relation === "stop_loss") passed = move <= -Math.abs(th);
+    else if (condition.relation === "take_profit") passed = move >= Math.abs(th);
+    else passed = Math.abs(move) >= Math.abs(th);
+    return {
+      conditionId: condition.id,
+      label,
+      passed,
+      detail: `${lastDate} 相对买入价 ${move.toFixed(2)}%，阈值 ${th}%`,
+    };
+  }
 
   if (condition.indicator === "ma") {
     if (condition.relation !== "cross_above") {
@@ -278,8 +385,11 @@ export function evaluateCondition(
 export function evaluateStrategy(
   strategy: Strategy,
   daily: KLine[],
+  ctx?: { entryPrice?: number },
 ): { passed: boolean; conditions: ConditionEval[] } {
-  const conditions = strategy.conditions.map((c) => evaluateCondition(c, daily));
+  const conditions = strategy.conditions.map((c) =>
+    evaluateCondition(c, daily, ctx),
+  );
   if (conditions.length === 0) {
     return { passed: false, conditions };
   }
@@ -294,9 +404,10 @@ export function signalOnDate(
   strategy: Strategy,
   daily: KLine[],
   asOf: string,
+  ctx?: { entryPrice?: number },
 ): boolean {
   const sliced = daily.filter((bar) => bar.date <= asOf);
-  return evaluateStrategy(strategy, sliced).passed;
+  return evaluateStrategy(strategy, sliced, ctx).passed;
 }
 
 function fmt(value: number | null | undefined): string {
@@ -341,11 +452,13 @@ function parseCondition(input: unknown): StrategyCondition {
     id: typeof raw.id === "string" ? raw.id : newConditionId(),
   });
   const timeframe = raw.timeframe === "weekly" ? "weekly" : "daily";
-  const indicator = raw.indicator === "macd_hist" ? "macd_hist" : "ma";
-  const relation =
-    raw.relation === "trough_turn_up" || raw.relation === "near_high"
-      ? raw.relation
-      : "cross_above";
+  const indicator =
+    raw.indicator === "macd_hist" ||
+    raw.indicator === "price_pct" ||
+    raw.indicator === "unparsed"
+      ? raw.indicator
+      : "ma";
+  const relation = parseRelation(raw.relation, indicator);
   const parsed: StrategyCondition = {
     ...base,
     timeframe,
@@ -358,9 +471,29 @@ function parseCondition(input: unknown): StrategyCondition {
     macdSignal: num(raw.macdSignal, base.macdSignal, 1),
     lookback: num(raw.lookback, base.lookback, 3),
     nearHighRatio: num(raw.nearHighRatio, base.nearHighRatio, 0.1, 1),
+    pctThreshold: num(raw.pctThreshold, base.pctThreshold, 0.1, 100),
     handwritten: typeof raw.handwritten === "string" ? raw.handwritten : "",
   };
   return applyHandwritten(parsed);
+}
+
+function parseRelation(
+  value: unknown,
+  indicator: StrategyCondition["indicator"],
+): StrategyCondition["relation"] {
+  if (
+    value === "cross_above" ||
+    value === "trough_turn_up" ||
+    value === "near_high" ||
+    value === "stop_loss" ||
+    value === "take_profit" ||
+    value === "pct_band"
+  ) {
+    return value;
+  }
+  if (indicator === "macd_hist") return "trough_turn_up";
+  if (indicator === "price_pct") return "pct_band";
+  return "cross_above";
 }
 
 function num(value: unknown, fallback: number, min: number, max = 500): number {

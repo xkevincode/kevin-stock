@@ -69,10 +69,9 @@ export function StrategyEditor({
         }
         const next = { ...c, ...patch };
         if (patch.indicator === "ma") next.relation = "cross_above";
-        if (patch.indicator === "macd_hist" && c.indicator === "ma") {
-          next.relation = "trough_turn_up";
-        }
-        next.handwritten = "";
+        if (patch.indicator === "macd_hist") next.relation = "trough_turn_up";
+        if (patch.indicator === "price_pct") next.relation = "pct_band";
+        if (!patch.handwritten) next.handwritten = "";
         return applyHandwritten(next);
       }),
     );
@@ -100,7 +99,7 @@ export function StrategyEditor({
         <DialogHeader>
           <DialogTitle>{draft.id.startsWith("new-") ? "新增策略" : "编辑策略"}</DialogTitle>
           <DialogDescription>
-            每条条件都可以手写，改完后会按文字更新周期、均线和 MACD。
+            每条条件都可以手写。槽位会按文字切换：均线、MACD，或收益/损失百分比。
           </DialogDescription>
         </DialogHeader>
 
@@ -224,9 +223,18 @@ function ConditionFields({
           onBlur={(e) => onChange({ handwritten: e.target.value })}
           placeholder="例如：周K MACD柱 近26根最低点后拐头向上"
         />
-        <p className="text-xs text-muted-foreground">槽位：{structuredLabel(condition)}</p>
+        <p className="text-xs text-muted-foreground">
+          槽位：{structuredLabel(condition)}
+        </p>
       </div>
+      {condition.indicator === "unparsed" ? (
+        <p className="text-sm text-amber-700">
+          未识别为可执行规则。可写「周K MACD拐头」「日K MA5上穿MA10」或「收益损失5%卖出」。
+        </p>
+      ) : (
+        <>
       <div className="grid gap-3 sm:grid-cols-3">
+        {condition.indicator !== "price_pct" ? (
         <FieldSelect
           label="周期"
           value={condition.timeframe}
@@ -236,6 +244,7 @@ function ConditionFields({
             { value: "weekly", label: "周K" },
           ]}
         />
+        ) : null}
         <FieldSelect
           label="指标"
           value={condition.indicator}
@@ -243,6 +252,7 @@ function ConditionFields({
           options={[
             { value: "ma", label: "均线 MA" },
             { value: "macd_hist", label: "MACD 柱" },
+            { value: "price_pct", label: "涨跌幅" },
           ]}
         />
         <FieldSelect
@@ -252,10 +262,16 @@ function ConditionFields({
           options={
             condition.indicator === "ma"
               ? [{ value: "cross_above", label: "上穿" }]
-              : [
-                  { value: "trough_turn_up", label: "最低点后拐头向上" },
-                  { value: "near_high", label: "处于高点附近" },
-                ]
+              : condition.indicator === "price_pct"
+                ? [
+                    { value: "pct_band", label: "收益或损失达到" },
+                    { value: "stop_loss", label: "亏损达到" },
+                    { value: "take_profit", label: "盈利达到" },
+                  ]
+                : [
+                    { value: "trough_turn_up", label: "最低点后拐头向上" },
+                    { value: "near_high", label: "处于高点附近" },
+                  ]
           }
         />
       </div>
@@ -273,6 +289,17 @@ function ConditionFields({
             label="慢线周期"
             value={condition.slowPeriod}
             onChange={(slowPeriod) => onChange({ slowPeriod })}
+          />
+        </div>
+      ) : condition.indicator === "price_pct" ? (
+        <div
+          className="grid grid-cols-2 gap-3"
+          key={`pct-${condition.relation}-${condition.pctThreshold}`}
+        >
+          <NumberField
+            label="百分比"
+            value={condition.pctThreshold}
+            onChange={(pctThreshold) => onChange({ pctThreshold })}
           />
         </div>
       ) : (
@@ -309,6 +336,8 @@ function ConditionFields({
             />
           ) : null}
         </div>
+      )}
+        </>
       )}
     </div>
   );

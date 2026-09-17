@@ -36,8 +36,14 @@ export interface KLine {
 }
 
 export type Timeframe = "daily" | "weekly";
-export type IndicatorKind = "ma" | "macd_hist";
-export type RelationKind = "cross_above" | "trough_turn_up" | "near_high";
+export type IndicatorKind = "ma" | "macd_hist" | "price_pct" | "unparsed";
+export type RelationKind =
+  | "cross_above"
+  | "trough_turn_up"
+  | "near_high"
+  | "stop_loss"
+  | "take_profit"
+  | "pct_band";
 export type StrategySide = "buy" | "sell";
 export type MatchMode = "all" | "any";
 
@@ -53,6 +59,7 @@ export interface StrategyCondition {
   macdSignal: number;
   lookback: number;
   nearHighRatio: number;
+  pctThreshold: number;
   handwritten: string;
 }
 

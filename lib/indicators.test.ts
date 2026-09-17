@@ -232,5 +232,14 @@ describe("handwritten conditions", () => {
     assert.equal(macdTurn.timeframe, "weekly");
     assert.equal(macdTurn.relation, "trough_turn_up");
     assert.equal(macdTurn.lookback, 52);
+
+    const band = parseHandwritten(
+      "收益损失5%卖出",
+      defaultBuyStrategy().conditions[1],
+    );
+    assert.equal(band.indicator, "price_pct");
+    assert.equal(band.relation, "pct_band");
+    assert.equal(band.pctThreshold, 5);
+    assert.equal(band.fastPeriod, defaultBuyStrategy().conditions[1].fastPeriod);
   });
 });

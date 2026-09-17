@@ -63,7 +63,7 @@ export function replayStock(options: {
     const history = daily.slice(0, i + 1);
     if (!holding) {
       if (signalOnDate(buy, history, bar.date)) pending = "buy";
-    } else if (signalOnDate(sell, history, bar.date)) {
+    } else if (signalOnDate(sell, history, bar.date, { entryPrice: buyPrice })) {
       pending = "sell";
     }
   }
