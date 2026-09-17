@@ -34,7 +34,7 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { daysAgo, formatDateInput, formatPct, formatPrice, pctClass, poolReasonLabel } from "@/lib/format";
-import { conditionLabel, defaultBuyStrategy, defaultSellStrategy } from "@/lib/strategies";
+import { conditionLabel, defaultBuyStrategy, defaultSellStrategy, parseHandwritten } from "@/lib/strategies";
 import { getStrategiesServerSnapshot, getStrategiesSnapshot, saveStrategies, subscribeStrategies } from "@/lib/storage";
 import type {
   ApiResponse,
@@ -340,7 +340,7 @@ function StrategyPanel({
           <div>
             <CardTitle>策略</CardTitle>
             <CardDescription>
-              保存在本机浏览器。默认可买入要求周 MACD 柱从 26 周最低点拐头，且日线 MA5 上穿 MA10。
+              买入每条条件都可直接手写修改。保存在本机浏览器，不会上传服务器。
             </CardDescription>
           </div>
           <Button size="sm" variant="outline" onClick={onCreate}>
@@ -367,9 +367,50 @@ function StrategyPanel({
                       {strategy.match === "all" ? "全部满足" : "任一满足"}
                     </Badge>
                   </div>
-                  <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
-                    {strategy.conditions.map((c) => (
-                      <li key={c.id}>· {conditionLabel(c)}</li>
+                  <ul className="mt-2 space-y-2">
+                    {strategy.conditions.map((c, index) => (
+                      <li key={c.id} className="grid gap-1">
+                        <span className="text-xs text-muted-foreground">
+                          条件 {index + 1}
+                        </span>
+                        <Input
+                          value={c.handwritten}
+                          onChange={(e) => {
+                            const handwritten = e.target.value;
+                            saveStrategies(
+                              strategies.map((s) =>
+                                s.id !== strategy.id
+                                  ? s
+                                  : {
+                                      ...s,
+                                      conditions: s.conditions.map((item) =>
+                                        item.id === c.id
+                                          ? { ...item, handwritten }
+                                          : item,
+                                      ),
+                                    },
+                              ),
+                            );
+                          }}
+                          onBlur={(e) => {
+                            saveStrategies(
+                              strategies.map((s) =>
+                                s.id !== strategy.id
+                                  ? s
+                                  : {
+                                      ...s,
+                                      conditions: s.conditions.map((item) =>
+                                        item.id === c.id
+                                          ? parseHandwritten(e.target.value, item)
+                                          : item,
+                                      ),
+                                    },
+                              ),
+                            );
+                          }}
+                          aria-label={`${strategy.name}条件${index + 1}`}
+                        />
+                      </li>
                     ))}
                   </ul>
                 </div>

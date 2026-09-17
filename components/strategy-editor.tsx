@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PlusIcon, Trash2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { defaultCondition, newConditionId } from "@/lib/strategies";
+import { applyHandwritten, defaultCondition, newConditionId, parseHandwritten } from "@/lib/strategies";
 import type {
   IndicatorKind,
   MatchMode,
@@ -50,18 +50,30 @@ export function StrategyEditor({
     strategy?.conditions.map((c) => ({ ...c })) ?? [],
   );
 
+  useEffect(() => {
+    if (!strategy) return;
+    setName(strategy.name);
+    setSide(strategy.side);
+    setMatch(strategy.match);
+    setConditions(strategy.conditions.map((c) => ({ ...c })));
+  }, [strategy]);
+
   if (!draft) return null;
 
   function updateCondition(id: string, patch: Partial<StrategyCondition>) {
     setConditions((prev) =>
       prev.map((c) => {
         if (c.id !== id) return c;
+        if (patch.handwritten !== undefined && Object.keys(patch).length === 1) {
+          return parseHandwritten(patch.handwritten, c);
+        }
         const next = { ...c, ...patch };
         if (patch.indicator === "ma") next.relation = "cross_above";
         if (patch.indicator === "macd_hist" && c.indicator === "ma") {
           next.relation = "trough_turn_up";
         }
-        return next;
+        next.handwritten = "";
+        return applyHandwritten(next);
       }),
     );
   }
@@ -77,7 +89,7 @@ export function StrategyEditor({
       enabled: draft.enabled,
       side,
       match,
-      conditions,
+      conditions: conditions.map((c) => applyHandwritten(c)),
     });
     onOpenChange(false);
   }
@@ -88,7 +100,7 @@ export function StrategyEditor({
         <DialogHeader>
           <DialogTitle>{draft.id.startsWith("new-") ? "新增策略" : "编辑策略"}</DialogTitle>
           <DialogDescription>
-            用条件表单组合日K/周K、均线与 MACD 柱。不是公式语言。
+            每条条件都可以手写，改完后会按文字更新周期、均线和 MACD。
           </DialogDescription>
         </DialogHeader>
 
@@ -203,6 +215,14 @@ function ConditionFields({
         >
           <Trash2Icon />
         </Button>
+      </div>
+      <div className="grid gap-1.5">
+        <Label className="text-xs text-muted-foreground">手写</Label>
+        <Input
+          value={condition.handwritten}
+          onChange={(e) => onChange({ handwritten: e.target.value })}
+          placeholder="例如：周K MACD柱 近26根最低点后拐头向上"
+        />
       </div>
       <div className="grid gap-3 sm:grid-cols-3">
         <FieldSelect
@@ -327,14 +347,35 @@ function NumberField({
   onChange: (value: number) => void;
   step?: number;
 }) {
+  const [text, setText] = useState(String(value));
+  useEffect(() => {
+    setText(String(value));
+  }, [value]);
+
   return (
     <div className="grid gap-1.5">
       <Label className="text-xs text-muted-foreground">{label}</Label>
       <Input
-        type="number"
+        type="text"
+        inputMode="decimal"
+        value={text}
+        onChange={(e) => {
+          const next = e.target.value;
+          setText(next);
+          if (next.trim() === "" || next === "-" || next.endsWith(".")) return;
+          const n = Number(next);
+          if (Number.isFinite(n)) onChange(n);
+        }}
+        onBlur={() => {
+          const n = Number(text);
+          if (Number.isFinite(n)) {
+            onChange(n);
+            setText(String(n));
+          } else {
+            setText(String(value));
+          }
+        }}
         step={step}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
       />
     </div>
   );

@@ -4,7 +4,7 @@ import { aggregateBacktest, replayStock } from "./backtest";
 import { maCrossAbove, macd, nearLookbackHigh, sma, troughTurnUp } from "./indicators";
 import { dailyToWeekly, weekKey } from "./market";
 import { mergePool } from "./pool";
-import { defaultBuyStrategy, defaultSellStrategy, evaluateStrategy } from "./strategies";
+import { defaultBuyStrategy, defaultSellStrategy, evaluateStrategy, parseHandwritten } from "./strategies";
 import type { KLine, Strategy } from "./types";
 
 function bar(date: string, close: number, open = close): KLine {
@@ -202,5 +202,27 @@ describe("default strategy wiring", () => {
     assert.equal(strategy.conditions.length, 2);
     const evaled = evaluateStrategy(strategy, [bar("2026-01-01", 1)]);
     assert.equal(evaled.passed, false);
+    assert.equal(strategy.conditions.every((c) => c.handwritten.length > 0), true);
+  });
+});
+
+describe("handwritten conditions", () => {
+  it("parses MA cross and weekly MACD trough text", () => {
+    const ma = parseHandwritten(
+      "日K MA8 上穿 MA21",
+      defaultBuyStrategy().conditions[1],
+    );
+    assert.equal(ma.timeframe, "daily");
+    assert.equal(ma.indicator, "ma");
+    assert.equal(ma.fastPeriod, 8);
+    assert.equal(ma.slowPeriod, 21);
+
+    const macdTurn = parseHandwritten(
+      "周K MACD柱 近52根最低点后拐头向上",
+      defaultBuyStrategy().conditions[0],
+    );
+    assert.equal(macdTurn.timeframe, "weekly");
+    assert.equal(macdTurn.relation, "trough_turn_up");
+    assert.equal(macdTurn.lookback, 52);
   });
 });

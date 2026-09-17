@@ -32,7 +32,33 @@ export function defaultCondition(
     macdSignal: 9,
     lookback: 26,
     nearHighRatio: 0.9,
+    handwritten: "",
     ...partial,
+  };
+}
+
+function structuredLabel(condition: StrategyCondition): string {
+  const tf = condition.timeframe === "weekly" ? "周K" : "日K";
+  if (condition.indicator === "ma" && condition.relation === "cross_above") {
+    return `${tf} MA${condition.fastPeriod} 上穿 MA${condition.slowPeriod}`;
+  }
+  if (
+    condition.indicator === "macd_hist" &&
+    condition.relation === "trough_turn_up"
+  ) {
+    return `${tf} MACD柱 近${condition.lookback}根最低点后拐头向上`;
+  }
+  if (condition.indicator === "macd_hist" && condition.relation === "near_high") {
+    return `${tf} MACD柱 处于近${condition.lookback}根高点附近（≥${Math.round(condition.nearHighRatio * 100)}%）`;
+  }
+  return `${tf} ${condition.indicator} ${condition.relation}`;
+}
+
+export function applyHandwritten(condition: StrategyCondition): StrategyCondition {
+  const text = condition.handwritten?.trim();
+  return {
+    ...condition,
+    handwritten: text || structuredLabel(condition),
   };
 }
 
@@ -53,6 +79,7 @@ export function defaultBuyStrategy(): Strategy {
         macdSlow: 26,
         macdSignal: 9,
         lookback: 26,
+        handwritten: "周K MACD柱 近26根最低点后拐头向上",
       }),
       defaultCondition({
         id: "default-buy-ma",
@@ -61,6 +88,7 @@ export function defaultBuyStrategy(): Strategy {
         relation: "cross_above",
         fastPeriod: 5,
         slowPeriod: 10,
+        handwritten: "日K MA5 上穿 MA10",
       }),
     ],
   };
@@ -84,6 +112,7 @@ export function defaultSellStrategy(): Strategy {
         macdSignal: 9,
         lookback: 26,
         nearHighRatio: 0.9,
+        handwritten: "周K MACD柱 处于近26根高点附近（≥90%）",
       }),
     ],
   };
@@ -94,20 +123,51 @@ export function defaultStrategies(): Strategy[] {
 }
 
 export function conditionLabel(condition: StrategyCondition): string {
-  const tf = condition.timeframe === "weekly" ? "周K" : "日K";
-  if (condition.indicator === "ma" && condition.relation === "cross_above") {
-    return `${tf} MA${condition.fastPeriod} 上穿 MA${condition.slowPeriod}`;
+  const text = condition.handwritten?.trim();
+  return text || structuredLabel(condition);
+}
+
+export function parseHandwritten(
+  text: string,
+  prev: StrategyCondition,
+): StrategyCondition {
+  const handwritten = text.trim();
+  const next: StrategyCondition = { ...prev, handwritten };
+  if (!handwritten) {
+    return applyHandwritten({ ...next, handwritten: "" });
   }
-  if (
-    condition.indicator === "macd_hist" &&
-    condition.relation === "trough_turn_up"
-  ) {
-    return `${tf} MACD柱 近${condition.lookback}根最低点后拐头向上`;
+
+  if (/周/.test(handwritten)) next.timeframe = "weekly";
+  else if (/日/.test(handwritten)) next.timeframe = "daily";
+
+  const ma =
+    handwritten.match(/MA\s*(\d+)\s*上穿\s*MA\s*(\d+)/i) ||
+    handwritten.match(/(\d+)\s*日均线?\s*向上?突破\s*(\d+)/) ||
+    handwritten.match(/(\d+)\s*日均线?\s*上穿\s*(\d+)/);
+  if (ma) {
+    next.indicator = "ma";
+    next.relation = "cross_above";
+    next.fastPeriod = Number(ma[1]);
+    next.slowPeriod = Number(ma[2]);
+    return next;
   }
-  if (condition.indicator === "macd_hist" && condition.relation === "near_high") {
-    return `${tf} MACD柱 处于近${condition.lookback}根高点附近（≥${Math.round(condition.nearHighRatio * 100)}%）`;
+
+  const lookback = handwritten.match(/(\d+)\s*(根|周)/);
+  if (/高点/.test(handwritten)) {
+    next.indicator = "macd_hist";
+    next.relation = "near_high";
+    if (lookback) next.lookback = Number(lookback[1]);
+    const pct = handwritten.match(/(\d+)\s*%/);
+    if (pct) next.nearHighRatio = Number(pct[1]) / 100;
+    return next;
   }
-  return `${tf} ${condition.indicator} ${condition.relation}`;
+  if (/拐头|最低点|MACD/i.test(handwritten)) {
+    next.indicator = "macd_hist";
+    next.relation = "trough_turn_up";
+    if (lookback) next.lookback = Number(lookback[1]);
+    return next;
+  }
+  return next;
 }
 
 function barsFor(condition: StrategyCondition, daily: KLine[]): KLine[] {
@@ -270,7 +330,7 @@ function parseCondition(input: unknown): StrategyCondition {
     raw.relation === "trough_turn_up" || raw.relation === "near_high"
       ? raw.relation
       : "cross_above";
-  return {
+  const parsed: StrategyCondition = {
     ...base,
     timeframe,
     indicator,
@@ -282,7 +342,9 @@ function parseCondition(input: unknown): StrategyCondition {
     macdSignal: num(raw.macdSignal, base.macdSignal, 1),
     lookback: num(raw.lookback, base.lookback, 3),
     nearHighRatio: num(raw.nearHighRatio, base.nearHighRatio, 0.1, 1),
+    handwritten: typeof raw.handwritten === "string" ? raw.handwritten : "",
   };
+  return applyHandwritten(parsed);
 }
 
 function num(value: unknown, fallback: number, min: number, max = 500): number {

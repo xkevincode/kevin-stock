@@ -53,6 +53,7 @@ export interface StrategyCondition {
   macdSignal: number;
   lookback: number;
   nearHighRatio: number;
+  handwritten: string;
 }
 
 export interface Strategy {
