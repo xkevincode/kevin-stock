@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { applyHandwritten, defaultCondition, newConditionId, parseHandwritten } from "@/lib/strategies";
+import { applyHandwritten, defaultCondition, newConditionId, parseHandwritten, structuredLabel } from "@/lib/strategies";
 import type {
   IndicatorKind,
   MatchMode,
@@ -221,8 +221,10 @@ function ConditionFields({
         <Input
           value={condition.handwritten}
           onChange={(e) => onChange({ handwritten: e.target.value })}
+          onBlur={(e) => onChange({ handwritten: e.target.value })}
           placeholder="例如：周K MACD柱 近26根最低点后拐头向上"
         />
+        <p className="text-xs text-muted-foreground">槽位：{structuredLabel(condition)}</p>
       </div>
       <div className="grid gap-3 sm:grid-cols-3">
         <FieldSelect
@@ -258,7 +260,10 @@ function ConditionFields({
         />
       </div>
       {condition.indicator === "ma" ? (
-        <div className="grid grid-cols-2 gap-3">
+        <div
+          className="grid grid-cols-2 gap-3"
+          key={`ma-${condition.fastPeriod}-${condition.slowPeriod}`}
+        >
           <NumberField
             label="快线周期"
             value={condition.fastPeriod}
@@ -271,7 +276,10 @@ function ConditionFields({
           />
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div
+          className="grid grid-cols-2 gap-3 sm:grid-cols-4"
+          key={`macd-${condition.macdFast}-${condition.macdSlow}-${condition.macdSignal}-${condition.lookback}-${condition.nearHighRatio}-${condition.relation}`}
+        >
           <NumberField
             label="快线"
             value={condition.macdFast}
@@ -320,7 +328,7 @@ function FieldSelect({
   return (
     <div className="grid gap-1.5">
       <Label className="text-xs text-muted-foreground">{label}</Label>
-      <Select value={value} onValueChange={onChange}>
+      <Select key={value} value={value} onValueChange={onChange}>
         <SelectTrigger className="w-full">
           <SelectValue />
         </SelectTrigger>

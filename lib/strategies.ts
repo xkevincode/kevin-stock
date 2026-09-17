@@ -37,7 +37,7 @@ export function defaultCondition(
   };
 }
 
-function structuredLabel(condition: StrategyCondition): string {
+export function structuredLabel(condition: StrategyCondition): string {
   const tf = condition.timeframe === "weekly" ? "周K" : "日K";
   if (condition.indicator === "ma" && condition.relation === "cross_above") {
     return `${tf} MA${condition.fastPeriod} 上穿 MA${condition.slowPeriod}`;
@@ -137,13 +137,17 @@ export function parseHandwritten(
     return applyHandwritten({ ...next, handwritten: "" });
   }
 
-  if (/周/.test(handwritten)) next.timeframe = "weekly";
-  else if (/日/.test(handwritten)) next.timeframe = "daily";
+  if (/周[Kk线]/.test(handwritten) || /周线/.test(handwritten)) {
+    next.timeframe = "weekly";
+  } else if (/日[Kk线]/.test(handwritten) || /日线/.test(handwritten)) {
+    next.timeframe = "daily";
+  }
 
   const ma =
-    handwritten.match(/MA\s*(\d+)\s*上穿\s*MA\s*(\d+)/i) ||
-    handwritten.match(/(\d+)\s*日均线?\s*向上?突破\s*(\d+)/) ||
-    handwritten.match(/(\d+)\s*日均线?\s*上穿\s*(\d+)/);
+    handwritten.match(/MA\s*(\d+)\s*(?:向上)?(?:上穿|突破)\s*MA\s*(\d+)/i) ||
+    handwritten.match(/(\d+)\s*日均线?\s*(?:向上)?(?:突破|上穿)\s*(\d+)\s*日?(?:均线)?/) ||
+    handwritten.match(/(\d+)\s*[/／]\s*(\d+)\s*均线/) ||
+    handwritten.match(/(\d+)\s*日?\s*上穿\s*(\d+)/);
   if (ma) {
     next.indicator = "ma";
     next.relation = "cross_above";
@@ -152,12 +156,24 @@ export function parseHandwritten(
     return next;
   }
 
-  const lookback = handwritten.match(/(\d+)\s*(根|周)/);
+  const lookback =
+    handwritten.match(/近\s*(\d+)\s*根/) ||
+    handwritten.match(/(\d+)\s*根/) ||
+    handwritten.match(/回看\s*(\d+)/);
+  const macdParams = handwritten.match(
+    /(?:MACD|macd)\s*(\d+)\s*[,/／]\s*(\d+)\s*[,/／]\s*(\d+)/i,
+  );
+  if (macdParams) {
+    next.macdFast = Number(macdParams[1]);
+    next.macdSlow = Number(macdParams[2]);
+    next.macdSignal = Number(macdParams[3]);
+  }
+
   if (/高点/.test(handwritten)) {
     next.indicator = "macd_hist";
     next.relation = "near_high";
     if (lookback) next.lookback = Number(lookback[1]);
-    const pct = handwritten.match(/(\d+)\s*%/);
+    const pct = handwritten.match(/(\d+(?:\.\d+)?)\s*%/);
     if (pct) next.nearHighRatio = Number(pct[1]) / 100;
     return next;
   }

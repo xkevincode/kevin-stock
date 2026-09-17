@@ -34,7 +34,7 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { daysAgo, formatDateInput, formatPct, formatPrice, pctClass, poolReasonLabel } from "@/lib/format";
-import { conditionLabel, defaultBuyStrategy, defaultSellStrategy, parseHandwritten } from "@/lib/strategies";
+import { defaultBuyStrategy, defaultSellStrategy, parseHandwritten, structuredLabel } from "@/lib/strategies";
 import { getStrategiesServerSnapshot, getStrategiesSnapshot, saveStrategies, subscribeStrategies } from "@/lib/storage";
 import type {
   ApiResponse,
@@ -376,7 +376,7 @@ function StrategyPanel({
                         <Input
                           value={c.handwritten}
                           onChange={(e) => {
-                            const handwritten = e.target.value;
+                            const parsed = parseHandwritten(e.target.value, c);
                             saveStrategies(
                               strategies.map((s) =>
                                 s.id !== strategy.id
@@ -384,25 +384,7 @@ function StrategyPanel({
                                   : {
                                       ...s,
                                       conditions: s.conditions.map((item) =>
-                                        item.id === c.id
-                                          ? { ...item, handwritten }
-                                          : item,
-                                      ),
-                                    },
-                              ),
-                            );
-                          }}
-                          onBlur={(e) => {
-                            saveStrategies(
-                              strategies.map((s) =>
-                                s.id !== strategy.id
-                                  ? s
-                                  : {
-                                      ...s,
-                                      conditions: s.conditions.map((item) =>
-                                        item.id === c.id
-                                          ? parseHandwritten(e.target.value, item)
-                                          : item,
+                                        item.id === c.id ? parsed : item,
                                       ),
                                     },
                               ),
@@ -410,6 +392,7 @@ function StrategyPanel({
                           }}
                           aria-label={`${strategy.name}条件${index + 1}`}
                         />
+                        <p className="text-xs text-muted-foreground">槽位：{structuredLabel(c)}</p>
                       </li>
                     ))}
                   </ul>

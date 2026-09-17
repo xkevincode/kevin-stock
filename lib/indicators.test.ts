@@ -217,6 +217,14 @@ describe("handwritten conditions", () => {
     assert.equal(ma.fastPeriod, 8);
     assert.equal(ma.slowPeriod, 21);
 
+    const maBreak = parseHandwritten(
+      "日K 5日均线向上突破10日线",
+      defaultBuyStrategy().conditions[1],
+    );
+    assert.equal(maBreak.fastPeriod, 5);
+    assert.equal(maBreak.slowPeriod, 10);
+    assert.equal(maBreak.timeframe, "daily");
+
     const macdTurn = parseHandwritten(
       "周K MACD柱 近52根最低点后拐头向上",
       defaultBuyStrategy().conditions[0],
